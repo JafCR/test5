@@ -48,6 +48,7 @@ contract EducationPlatform is Ownable {
         bool active;
         uint activeStudents;
         uint seatsAvailable; //to simulate a student buying multiple seats for a course
+        uint totalSeats;
     }
 
 
@@ -71,6 +72,11 @@ contract EducationPlatform is Ownable {
         _;
     }
 
+    modifier enoughSeats(uint _universityId, uint _courseId, uint _quantity) {
+        require((universities[_universityId].courses[_courseId].seatsAvailable >= _quantity), "NOT ENOUGH SEATS IN THIS COURSE - CONTACT UNIVERSITY OWNER");
+        _;
+    }
+
     modifier ownerAtUniversity(uint _universityId) {
         require((universities[_universityId].UniversityOwner == msg.sender), "DOES NOT BELONG TO THE UNIVERSITY OWNERS OR IS INACTIVE");
         require(universityOwners.has(msg.sender), "DOES NOT HAVE UNIVERSITY OWNER ROLE");
@@ -85,10 +91,12 @@ contract EducationPlatform is Ownable {
     modifier paidEnough(uint _universityId, uint _courseId, uint _quantity)
     {
         uint coursePrice = universities[_universityId].courses[_courseId].cost;
+        require((universities[_universityId].courses[_courseId].seatsAvailable >= _quantity), "NOT ENOUGH SEATS IN THIS COURSE - CONTACT UNIVERSITY OWNER");
         require(msg.value >= (coursePrice * _quantity), "NOT ENOUGH FEES PAID");
         _;
     }
 
+    
     modifier checkValue(uint _universityId, uint _courseId, uint _quantity, address payable _addr)  {
     //refund them after pay for item
         _;
@@ -122,6 +130,7 @@ contract EducationPlatform is Ownable {
         Course memory newCourse;
         newCourse.courseName = _courseName;
         newCourse.seatsAvailable = _seatsAvailable;
+        newCourse.totalSeats = _seatsAvailable;
         newCourse.cost = _cost;
         newCourse.active = true;
         newCourse.activeStudents = 0;
@@ -144,6 +153,7 @@ contract EducationPlatform is Ownable {
         Course memory newCourse;
         newCourse.courseName = _courseName;
         newCourse.seatsAvailable = _seatsAvailable;
+        newCourse.totalSeats = _seatsAvailable;
         newCourse.cost = _cost;
         newCourse.active = _isActive;
         universities[_universityId].courses[_courseId] = newCourse;
@@ -213,13 +223,24 @@ contract EducationPlatform is Ownable {
     */
 
     function buyCourse(uint _uniId, uint _courseId, uint _quantity)
-    public
-    payable
+    public payable
     isStudent(msg.sender)
+    //enoughSeats(_uniId, _courseId, _quantity) //had to include this modifier into paidEnough to prevent: CompilerError: Stack too deep, try removing local variables.
     paidEnough(_uniId, _courseId, _quantity)
     checkValue(_uniId, _courseId, _quantity, msg.sender)
     {
-        universities[_uniId].UniversityOwner.transfer(msg.value);
+        //uint totalCoursePrice = universities[_uniId].courses[_courseId].cost * _quantity;
+        //universities[_uniId].UniversityOwner.transfer(totalCoursePrice);
+        universities[_uniId].courses[_courseId].seatsAvailable -= _quantity;
+    }
+
+    function withdrawCourseFunds(uint _uniId, uint _courseId)
+    public payable
+    ownerAtUniversity(_uniId)
+    {
+        uint courseBalance = (universities[_uniId].courses[_courseId].totalSeats - universities[_uniId].courses[_courseId].seatsAvailable) * universities[_uniId].courses[_courseId].cost;
+        msg.sender.transfer(courseBalance);
+        //emit an event
     }
 
 }
